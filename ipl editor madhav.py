@@ -2,7 +2,7 @@ import struct, re, sys, webbrowser
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, scrolledtext, ttk
 import os
-
+####################################################### Insipired by grinch's ipl file editor ####################################
 ###############################################
 # Format
 header_format = "4s18i"
