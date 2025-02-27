@@ -96,7 +96,7 @@ class IPLEditor:
         menu_bar = tk.Menu(self.root)
         self.root.config(menu=menu_bar)
         file_menu = tk.Menu(menu_bar, tearoff=0)
-        file_menu.add_command(label="Open IPL Files", command=self.open_and_edit_files)
+        file_menu.add_command(label="Open IPL Files(Scans Whole Folders)", command=self.open_and_edit_files)
         file_menu.add_command(label="Open IPL Files (Multiple)", command=self.open_multiple_files)
         file_menu.add_command(label="Save Changes", command=self.save_edits)
         file_menu.add_command(label="Save Selected File", command=self.save_selected_file)
