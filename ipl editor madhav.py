@@ -1,5 +1,6 @@
 import struct, re, sys, webbrowser
 import tkinter as tk
+import subprocess
 from tkinter import filedialog, messagebox, simpledialog, scrolledtext, ttk
 import os
 ####################################################### Insipired by grinch's ipl file editor ####################################
@@ -119,7 +120,7 @@ class IPLEditor:
         self.status_bar = ttk.Label(self.root, text="No file loaded", anchor="w")
         self.status_bar.pack(fill="x", side="bottom")
         
-     def launch_IPL_ID_Sorting_Tool(self):
+    def launch_IPL_ID_Sorting_Tool(self):
             tool_path = os.path.join(os.path.dirname(__file__), "IPL ID Sorting Script.py")
             if os.path.exists(tool_path):
                subprocess.Popen(["python", tool_path], shell=True)
