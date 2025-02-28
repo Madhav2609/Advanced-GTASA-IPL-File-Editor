@@ -111,13 +111,27 @@ class IPLEditor:
         menu_bar.add_cascade(label="File", menu=file_menu)
 
         tools_menu = tk.Menu(menu_bar, tearoff=0)
-        # tools_menu.add_command(label="IPL Lod Separator", command=self.launch_IPL_LOD_Separator_Tool)
+        tools_menu.add_command(label="IPL Lod Separator", command=self.launch_IPL_LOD_Separator_Tool)
+        tools_menu.add_command(label="IPL ID Sorting", command=self.launch_IPL_ID_Sorting_Tool)
 
         menu_bar.add_cascade(label="Tools", menu=tools_menu)
         # Status Bar
         self.status_bar = ttk.Label(self.root, text="No file loaded", anchor="w")
         self.status_bar.pack(fill="x", side="bottom")
-
+        
+     def launch_IPL_ID_Sorting_Tool(self):
+            tool_path = os.path.join(os.path.dirname(__file__), "IPL ID Sorting Script.py")
+            if os.path.exists(tool_path):
+               subprocess.Popen(["python", tool_path], shell=True)
+            else:
+               messagebox.showerror("Error", "Tool script not found!")
+    
+    def launch_IPL_LOD_Separator_Tool(self):
+        tool_path = os.path.join(os.path.dirname(__file__), "ipl lod separator.py")
+        if os.path.exists(tool_path):
+           subprocess.Popen(["python", tool_path], shell=True)
+        else:
+           messagebox.showerror("Error", "Tool script not found!")
     def search_text(self):
         self.text_editor.tag_remove("search_highlight", "1.0", tk.END)
         search_query = self.search_entry.get().strip()
