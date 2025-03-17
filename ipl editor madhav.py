@@ -17,7 +17,6 @@ cars_size = struct.calcsize(cars_format)
 program_name = "IPL Editor"
 filename: str = None
 filetype: str = " "
-
 # string variables to shorten loop and menu code
 file_new: str = 'New'
 file_open: str = 'Open'
@@ -403,17 +402,8 @@ class IPLEditor:
 
                     new_content = full_text[start_index:next_section_index].strip() if next_section_index != -1 else full_text[start_index:].strip()
 
-                    create_stream_files = messagebox.askyesno("Streaming Files",
-                                                                "Create multiple streaming files for the IPL?")
-                    num_stream_files = 0
-                    if create_stream_files:
-                        num_stream_files = simpledialog.askinteger("Number of Streaming Files",
-                                                                    "Enter the number of streaming files to create:")
-                        if num_stream_files is None or num_stream_files <= 0:  # User cancelled or entered invalid number
-                            return
-
                     if file_type == "binary":
-                        self.write_binary_file(path, new_content, num_stream_files)
+                        self.write_binary_file(path, new_content)
                         self.original_contents[path] = "bnry"  # Mark as binary
                     else:
                         with open(path, "w", encoding="utf-8", errors="ignore") as file:
@@ -430,74 +420,6 @@ class IPLEditor:
             messagebox.showerror("Error", "No file selected.")
 
     def convert_all_files(self, file_type):
-        # Create a new Toplevel window for the dialog
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Streaming Files Configuration")
-
-        # Dictionary to store the number of streaming files for each IPL file
-        num_stream_files = {}
-
-        # Function to apply the settings and close the dialog
-        def apply_settings():
-            for path, var in file_vars.items():
-                try:
-                    num_stream_files[path] = int(var.get())
-                except ValueError:
-                    messagebox.showerror("Error", f"Invalid number of streaming files for {os.path.basename(path)}.")
-                    return
-            dialog.destroy()
-            self.process_convert_all_files(file_type, num_stream_files)
-
-        # Frame to hold the file-specific settings
-        settings_frame = ttk.Frame(dialog, padding="10")
-        settings_frame.pack(expand=True, fill="both")
-
-        # Scrollable canvas
-        canvas = tk.Canvas(settings_frame)
-        scrollbar = ttk.Scrollbar(settings_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(
-                scrollregion=canvas.bbox("all")
-            )
-        )
-
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        # Dictionary to store the variables for each file
-        file_vars = {}
-
-        # Add a setting for each file
-        for path, (start, end) in self.file_sections.items():
-            file_basename = os.path.basename(path)
-            label = ttk.Label(scrollable_frame, text=f"Number of streaming files for {file_basename}:")
-            label.pack(pady=5)
-
-            var = tk.StringVar(value="0")  # Default to 0 streaming files
-            entry = ttk.Entry(scrollable_frame, textvariable=var, width=5)
-            entry.pack(pady=5)
-
-            file_vars[path] = var
-
-        # Apply and Cancel buttons
-        apply_button = ttk.Button(dialog, text="Apply", command=apply_settings)
-        apply_button.pack(side="left", padx=10, pady=10)
-
-        cancel_button = ttk.Button(dialog, text="Cancel", command=dialog.destroy)
-        cancel_button.pack(side="right", padx=10, pady=10)
-
-        # Make the dialog modal
-        dialog.grab_set()
-        dialog.focus_set()
-        dialog.wait_window()
-
-    def process_convert_all_files(self, file_type, num_stream_files):
         for path, (start, end) in self.file_sections.items():
             full_text = self.text_editor.get("1.0", tk.END)
             file_basename = os.path.basename(path)
@@ -514,7 +436,7 @@ class IPLEditor:
             new_content = full_text[start_index:next_section_index].strip() if next_section_index != -1 else full_text[start_index:].strip()
 
             if file_type == "binary":
-                self.write_binary_file(path, new_content, num_stream_files.get(path, 0))
+                self.write_binary_file(path, new_content)
                 self.original_contents[path] = "bnry"  # Mark as binary
             else:
                 with open(path, "w", encoding="utf-8", errors="ignore") as file:
@@ -525,7 +447,7 @@ class IPLEditor:
         self.status_bar.config(text=f"All files converted to {file_type} successfully")
         self.highlight_syntax()
 
-    def write_binary_file(self, save_name, text, num_stream_files=0):
+    def write_binary_file(self, save_name, text):
         try:
             # Separate the 'inst' and 'cars' sections
             inst_section = ""
@@ -549,108 +471,52 @@ class IPLEditor:
                 elif current_section == "cars":
                     cars_section += line + "\n"
 
-            inst_lines = inst_section.splitlines()
-            num_inst_lines = len(inst_lines)
+            # Process instance data
+            inst_data = []
+            inst_count = 0
+            for line in inst_section.splitlines():
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                temp = re.findall(r'[-,+]?\b\d[\d,.]*\b', line)
+                if len(temp) == 10:
+                    inst_data.append(temp)
+                    inst_count += 1
 
-            # Split 'inst' section into parts for streaming files
-            if num_stream_files > 0:
-                lines_per_file = num_inst_lines // num_stream_files
-                remainder = num_inst_lines % num_stream_files
-            else:
-                lines_per_file = num_inst_lines
-                remainder = 0
-
-            # Collect cars data before the loop
-            cars_data: list = []
-            is_cars_section: bool = False
+            # Process cars data
+            cars_data = []
             for line in cars_section.splitlines():
                 line = line.strip()
-                if not line:
+                if not line or line.startswith('#'):
                     continue
-                temp: str = re.findall(r'[-,+]?\b\d[\d,.]*\b', line)
-                if line == "cars":
-                    is_cars_section = True
-                    continue
-                if line == "end":
-                    is_cars_section = False
-                    continue
-                if is_cars_section and len(temp) == 12:
+                temp = re.findall(r'[-,+]?\b\d[\d,.]*\b', line)
+                if len(temp) == 12:
                     cars_data.append(temp)
 
-            # Process each streaming file
-            for i in range(num_stream_files if num_stream_files > 0 else 1):
-                stream_inst_lines = []
-                if num_stream_files > 0:
-                    start_index = i * lines_per_file
-                    end_index = (i + 1) * lines_per_file
-                    if i == num_stream_files - 1:
-                        end_index += remainder  # Add remaining lines to the last file
-                    stream_inst_lines = inst_lines[start_index:end_index]
-                    stream_file_name = f"{os.path.splitext(save_name)[0]}_stream{i:02d}{os.path.splitext(save_name)[1]}"
-                else:
-                    stream_inst_lines = inst_lines
-                    stream_file_name = save_name
+            # Write binary file
+            with open(save_name, 'wb') as f:
+                write_data = b""
+                cars_offset = inst_count * inst_size
 
-                is_inst_section: bool = False
-                inst_data: list = []
-                inst_count: int = 0
-                cars_count: int = 0
+                # Write instance data
+                for data in inst_data:
+                    write_data += struct.pack(inst_format, 
+                        float(data[2]), float(data[3]), float(data[4]),
+                        float(data[5]), float(data[6]), float(data[7]),
+                        float(data[8]), int(data[0]), int(data[1]), int(data[9]))
 
-                stream_text = "inst\n"
-                for line in stream_inst_lines:
-                    stream_text += line + "\n"
-                stream_text += "end\ncars\n"
-                for line in cars_section.splitlines():
-                    stream_text += line + "\n"
-                stream_text += "end"
+                # Write cars data
+                for data in cars_data:
+                    write_data += struct.pack(cars_format,
+                        float(data[0]), float(data[1]), float(data[2]), float(data[3]),
+                        int(data[4]), int(data[5]), int(data[6]), int(data[7]),
+                        int(data[8]), int(data[9]), int(data[10]), int(data[11]))
 
-                for line in stream_text.splitlines():
-                    line = line.strip()  # Remove leading/trailing whitespace
-                    if not line:  # Skip empty lines
-                        continue
-                    temp: str = re.findall(r'[-,+]?\b\d[\d,.]*\b', line)
-
-                    if line == "inst":
-                        is_inst_section = True
-                        continue  # Skip the 'inst' line itself
-                    if line == "cars":
-                        continue  # Skip the 'cars' line itself
-
-                    if line == "end":
-                        if is_inst_section:
-                            is_inst_section = False
-                        continue  # Skip the 'end' line itself
-
-                    if line.startswith('#'):
-                        continue  # Skip comments
-
-                    if is_inst_section and len(temp) == 10:
-                        inst_data.append(temp)
-                        inst_count += 1
-
-                with open(stream_file_name, 'wb') as f:
-                    write_data: bytes = b""
-                    cars_offset: int = 0
-
-                    for data in inst_data:
-                        write_data += struct.pack(inst_format, float(data[2]), float(data[3]), float(data[4]),
-                                                 float(data[5]), float(data[6]), float(data[7]),
-                                                 float(data[8]), int(data[0]), int(data[1]), int(data[9]))
-                        cars_offset += inst_size
-
-                    # Use the collected cars_data for all files
-                    for data in cars_data:
-                        write_data += struct.pack(cars_format, float(data[0]), float(data[1]), float(data[2]),
-                                                 float(data[3]), int(data[4]), int(data[5]),
-                                                 int(data[6]), int(data[7]), int(data[8]), int(data[9]), int(data[10]),
-                                                 int(data[11]))
-
-                    write_data = struct.pack(header_format, b'bnry', inst_count, 0, 0, 0, len(cars_data), 0, 76, 0, 0, 0,
-                                             0,
-                                             0, 0, 0, cars_offset, 0, 0,
-                                             0) + write_data
-
-                    f.write(write_data)
+                # Write header and data
+                header = struct.pack(header_format, b'bnry', inst_count, 0, 0, 0, 
+                                   len(cars_data), 0, 76, 0, 0, 0, 0, 0, 0, 0, 
+                                   cars_offset, 0, 0, 0)
+                f.write(header + write_data)
 
         except Exception as e:
             messagebox.showerror("Error", f"An error occurred while writing to file: {e}")
