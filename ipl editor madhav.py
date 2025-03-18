@@ -184,14 +184,25 @@ class IPLEditor:
 
     def find_fastman92_processor(self):
         """Find fastman92_processor.exe in the current directory"""
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        processor_path = os.path.join(current_dir, "fastman92_processor.exe")
-        return processor_path if os.path.exists(processor_path) else None
+        search_paths = [
+            os.path.dirname(os.path.abspath(__file__)),  # Current directory
+            os.getcwd(),  # Working directory
+            os.path.dirname(sys.executable),  # Executable directory
+            '.'  # Relative path
+        ]
+        
+        for path in search_paths:
+            processor_path = os.path.join(path, "fastman92_processor.exe")
+            if os.path.exists(processor_path):
+                return processor_path
+                
+        return None
 
     def run_fastman92_conversion(self, input_file, output_file, input_type, output_type):
         """Run Fastman92 Processor for file conversion"""
         if not self.fastman92_path:
-            messagebox.showerror("Error", "Fastman92 Processor not found!")
+            messagebox.showerror("Error", 
+                "Fastman92 Processor not found!\nPlease place fastman92_processor.exe in the same folder as the application.")
             return False
 
         command = [
