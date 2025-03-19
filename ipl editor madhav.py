@@ -182,6 +182,10 @@ class IPLEditor:
         if not self.fastman92_path:
             messagebox.showwarning("Warning", "Fastman92 Processor not found in the current directory. Some features may be limited.")
 
+        self.text_editor.vbar.bind("<B1-Motion>", self._on_scroll)
+        self.text_editor.bind("<MouseWheel>", self._on_scroll)
+        self._highlight_after = None
+
     def find_fastman92_processor(self):
         """Find fastman92_processor.exe in the current directory"""
         search_paths = [
@@ -648,80 +652,103 @@ class IPLEditor:
             messagebox.showerror("Error", f"An error occurred while writing to file: {e}")
 
     def highlight_syntax(self, event=None):
-        """Highlight syntax based on section formats"""
-        # Clear existing tags
-        for tag in ["section", "id", "modelname", "coordinate", "comment", "file_header"]:
-            self.text_editor.tag_remove(tag, "1.0", "end")
+        """Efficient syntax highlighting using VS Code-like strategies"""
+        try:
+            # Get only visible area
+            first_visible = self.text_editor.index("@0,0")
+            last_visible = self.text_editor.index(f"@0,{self.text_editor.winfo_height()}")
+            
+            # Convert to line numbers
+            start_line = max(1, int(float(first_visible)) - 1)
+            end_line = min(int(float(last_visible)) + 1, 
+                          int(float(self.text_editor.index("end"))))
 
-        # Configure tag colors with better contrast
-        self.text_editor.tag_configure("file_header", foreground="#4CAF50", font=("Consolas", 12, "bold"))
-        self.text_editor.tag_configure("section", foreground="#00FF00")
-        self.text_editor.tag_configure("id", foreground="#FFA500")
-        self.text_editor.tag_configure("modelname", foreground="#ADD8E6")
-        self.text_editor.tag_configure("coordinate", foreground="#FF69B4")
-        self.text_editor.tag_configure("comment", foreground="#808080")
+            # Clear only visible tags
+            for tag in ["section", "id", "modelname", "coordinate", "comment", "file_header"]:
+                self.text_editor.tag_remove(tag, f"{start_line}.0", f"{end_line}.end")
 
-        content = self.text_editor.get("1.0", "end-1c")
-        lines = content.split('\n')
-        current_section = None
-
-        for line_num, line in enumerate(lines, 1):
-            line = line.strip()
-            if not line:
-                continue
-
-            # Highlight file headers
-            if line.startswith("// --- ") and line.endswith(" --- //"):
-                self.text_editor.tag_add("file_header", f"{line_num}.0", f"{line_num}.end")
-                continue
-
-            # Highlight comments
-            if '#' in line:
-                comment_start = line.index('#')
-                self.text_editor.tag_add("comment", f"{line_num}.{comment_start}", f"{line_num}.end")
-                line = line[:comment_start].strip()  # Remove comment for further processing
+            # Cache current section for visible area
+            current_section = self._find_current_section(start_line)
+            
+            # Process only visible lines
+            for line_num in range(start_line, end_line + 1):
+                line = self.text_editor.get(f"{line_num}.0", f"{line_num}.end").strip()
                 if not line:
                     continue
 
-            # Check for section headers
-            lower_line = line.lower()
-            if lower_line in map(str.lower, self.section_formats.keys()) or lower_line == "end":
-                current_section = line.upper() if lower_line != "end" else None
-                self.text_editor.tag_add("section", f"{line_num}.0", f"{line_num}.end")
-                continue
+                # Update section context
+                if line.upper() in self.section_formats or line.upper() == "END":
+                    current_section = line.upper() if line.upper() != "END" else None
+                    self.text_editor.tag_add("section", f"{line_num}.0", f"{line_num}.end")
+                    continue
 
-            # Process data lines based on current section
-            if current_section and current_section in self.section_formats:
-                parts = [p.strip() for p in line.split(',')]
-                format_info = self.section_formats[current_section]
-                
-                if len(parts) >= format_info["min_parts"]:
-                    pos = 0
-                    for i, part in enumerate(parts):
-                        start_pos = line.find(part, pos)
-                        if start_pos == -1:
-                            continue
-                        end_pos = start_pos + len(part)
+                self._highlight_line(line_num, line, current_section)
 
-                        # Highlight ID fields
-                        if i == 0 and part.strip().isdigit():
-                            self.text_editor.tag_add("id", f"{line_num}.{start_pos}", f"{line_num}.{end_pos}")
+        except Exception as e:
+            print(f"Highlighting error: {e}")
 
-                        # Highlight model names in INST section
-                        if current_section == "INST" and i == 1:
-                            self.text_editor.tag_add("modelname", f"{line_num}.{start_pos}", f"{line_num}.{end_pos}")
+    def _find_current_section(self, start_line):
+        """Find the current section context by looking up"""
+        line = start_line
+        while line > 0:
+            content = self.text_editor.get(f"{line}.0", f"{line}.end").strip().upper()
+            if content in self.section_formats:
+                return content
+            if content == "END":
+                return None
+            line -= 1
+        return None
 
-                        # Highlight coordinates based on section format
-                        coord_indices = []
-                        if "coords" in format_info:
-                            coord_indices.extend([idx for group in format_info["coords"] for idx in group])
-                        if "alt_coords" in format_info:
-                            coord_indices.extend([idx for group in format_info["alt_coords"] for idx in group])
+    def _highlight_line(self, line_num, line, current_section):
+        """Highlight a single line efficiently"""
+        # File headers
+        if line.startswith("// --- ") and line.endswith(" --- //"):
+            self.text_editor.tag_add("file_header", f"{line_num}.0", f"{line_num}.end")
+            return
 
-                        if i in coord_indices and re.match(r'-?\d*\.?\d+', part.strip()):
-                            self.text_editor.tag_add("coordinate", f"{line_num}.{start_pos}", f"{line_num}.{end_pos}")
+        # Comments
+        if '#' in line:
+            comment_start = line.index('#')
+            self.text_editor.tag_add("comment", f"{line_num}.{comment_start}", f"{line_num}.end")
+            line = line[:comment_start].strip()
+            if not line:
+                return
 
-                        pos = end_pos + 1
+        # Process section content
+        if current_section and current_section in self.section_formats:
+            parts = [p.strip() for p in line.split(',')]
+            format_info = self.section_formats[current_section]
+            
+            if len(parts) >= format_info["min_parts"]:
+                pos = 0
+                for i, part in enumerate(parts):
+                    if not part:
+                        continue
+                        
+                    start_pos = line.find(part, pos)
+                    if start_pos == -1:
+                        continue
+                    end_pos = start_pos + len(part)
+
+                    # Apply appropriate tags based on position and content
+                    if i == 0 and part.isdigit():
+                        self.text_editor.tag_add("id", f"{line_num}.{start_pos}", f"{line_num}.{end_pos}")
+                    elif current_section == "INST" and i == 1:
+                        self.text_editor.tag_add("modelname", f"{line_num}.{start_pos}", f"{line_num}.{end_pos}")
+                    elif self._is_coordinate_index(i, format_info) and re.match(r'-?\d*\.?\d+', part):
+                        self.text_editor.tag_add("coordinate", f"{line_num}.{start_pos}", f"{line_num}.{end_pos}")
+
+                    pos = end_pos + 1
+
+    def _is_coordinate_index(self, index, format_info):
+        """Helper to check if index is a coordinate position"""
+        if "coords" in format_info:
+            if any(index in group for group in format_info["coords"]):
+                return True
+        if "alt_coords" in format_info:
+            if any(index in group for group in format_info["alt_coords"]):
+                return True
+        return False
 
     def show_map_mover_dialog(self):
         """Show simplified dialog for map movement settings"""
@@ -731,7 +758,7 @@ class IPLEditor:
 
         dialog = tk.Toplevel(self.root)
         dialog.title("Map Mover")
-        dialog.geometry("400x650")
+        dialog.geometry("500x750")
         dialog.configure(bg="#1E1E1E")
         dialog.resizable(False, False)
         
@@ -955,6 +982,12 @@ class IPLEditor:
         except (ValueError, IndexError) as e:
             print(f"Error processing coordinates: {e}")
         return parts
+
+    def _on_scroll(self, event=None):
+        """Handle scroll events with debouncing"""
+        if self._highlight_after:
+            self.root.after_cancel(self._highlight_after)
+        self._highlight_after = self.root.after(50, self.highlight_syntax)
 
 if __name__ == "__main__":
     root = tk.Tk()
