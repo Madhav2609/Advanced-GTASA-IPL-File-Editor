@@ -3,8 +3,7 @@ import tkinter as tk
 import subprocess
 from tkinter import filedialog, messagebox, simpledialog, scrolledtext, ttk
 import os
-####################################################### Insipired by grinch's ipl file editor ####################################
-###############################################
+
 # Format
 header_format = "4s18i"
 inst_format = "7f3i"
